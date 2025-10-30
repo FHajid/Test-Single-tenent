@@ -1,0 +1,57 @@
+create table if not exists products (
+  id bigserial primary key,
+  slug text unique not null,
+  name text not null,
+  price integer not null,
+  description text,
+  specs text
+);
+create table if not exists stock (
+  product_id bigint primary key references products(id) on delete cascade,
+  qty integer not null default 0
+);
+create table if not exists orders (
+  id bigserial primary key,
+  product_id bigint references products(id),
+  status text not null,
+  created_at timestamptz not null default now()
+);
+
+
+==============================================================
+SEED
+
+insert into products (slug,name,price,description,specs) values
+  ('sneaker-alpha','Sneaker Alpha',589000,'Sepatu kasual harian.','Material: Mesh\nBerat: 250g'),
+  ('hoodie-beta','Hoodie Beta',399000,'Hoodie hangat & nyaman.','Bahan: Fleece\nUkuran: S-XL'),
+  ('watch-gamma','Watch Gamma',799000,'Jam tangan minimalis.','Case: Steel\nWater: 5ATM')
+on conflict do nothing;
+
+insert into stock (product_id, qty)
+select id, case when slug='watch-gamma' then 1 else 5 end
+from products
+on conflict (product_id) do nothing;
+
+
+==============================================================
+Fungsi atomic checkout 
+
+
+create or replace function checkout_atomic(p_product_id bigint)
+returns boolean
+language plpgsql
+as $$
+declare updated_row record;
+begin
+  update stock set qty = qty - 1
+   where product_id = p_product_id and qty >= 1
+  returning * into updated_row;
+
+  if found then
+    insert into orders(product_id, status) values (p_product_id, 'PAID');
+    return true;
+  else
+    return false;
+  end if;
+end;
+$$;
