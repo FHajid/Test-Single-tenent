@@ -4,9 +4,9 @@ import { supabaseAnon } from '@/lib/supabase';
 
 export async function GET(
   _req: NextRequest,
-  context: { params: Promise<{ slug: string }> }
+  { params }: { params: { slug: string } }
 ) {
-  const { slug } = await context.params; // ✅ await the params promise
+  const { slug } = params; // Remove the await - params is not a Promise
 
   const sb = supabaseAnon();
 
