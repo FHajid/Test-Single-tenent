@@ -1,6 +1,8 @@
 // app/products/[slug]/page.tsx
 import Link from "next/link";
+import Image from "next/image";
 import ProductTabs from "@/components/ProductTabs";
+import CheckoutButton from "@/components/CheckoutButton";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
 import { revalidateTag, revalidatePath } from "next/cache";
 import { CATALOG_TAG } from "@/lib/constants";
@@ -12,6 +14,7 @@ type ProductRow = {
   price: number | string | null;
   description?: string | null;
   specs?: string | null;
+  images?: string[] | null; // optional kalau kamu sudah punya kolom ini
 };
 
 export default async function ProductDetail({
@@ -19,9 +22,12 @@ export default async function ProductDetail({
 }: {
   params: { slug: string } | Promise<{ slug: string }>;
 }) {
+  // Next 15: params bisa Promise → unwrap aman
   const { slug } = await Promise.resolve(params);
 
   const sb = supabaseAnon();
+
+  // Ambil produk
   const { data: product, error: e1 } = await sb
     .from("products")
     .select("*")
@@ -30,23 +36,28 @@ export default async function ProductDetail({
 
   if (e1 || !product) {
     return (
-      <main className="max-w-3xl mx-auto p-6">
+      <main className="mx-auto max-w-3xl p-6">
         <p className="text-red-600">Produk tidak ditemukan.</p>
-        <Link href="/products" className="text-blue-600 underline">← Kembali ke katalog</Link>
+        <Link href="/products" className="text-blue-600 underline">
+          ← Kembali ke katalog
+        </Link>
       </main>
     );
   }
 
+  // Ambil stok
   const { data: st } = await sb
     .from("stock")
     .select("qty")
     .eq("product_id", product.id)
     .single<{ qty: number | string | null }>();
 
-  const price = typeof product.price === "number" ? product.price : Number(product.price ?? 0);
+  // Normalisasi nilai
+  const price =
+    typeof product.price === "number" ? product.price : Number(product.price ?? 0);
   const qty = typeof st?.qty === "number" ? st.qty : Number(st?.qty ?? 0);
 
-  // ✅ Server Action — call Supabase directly (no /api/checkout)
+  // Server Action — panggil Supabase langsung (tanpa /api/checkout)
   async function checkoutAction(formData: FormData) {
     "use server";
     const pid = Number(formData.get("productId"));
@@ -55,43 +66,84 @@ export default async function ProductDetail({
     const svc = supabaseService();
     const { data, error } = await svc.rpc("checkout_atomic", { p_product_id: pid });
 
-    // Invalidate caches so catalog & page update
-    revalidateTag(CATALOG_TAG);
+    // Invalidate caches supaya katalog & halaman ini update
+    revalidateTag(CATALOG_TAG, "");             // tag name and profile string
     revalidatePath("/products", "page");
     revalidatePath(`/products/${slug}`, "page");
 
     if (error) throw new Error(`Checkout failed: ${error.message}`);
-    // if data !== true → out of stock; you could surface a message via redirect/searchParams if needed
+    // jika data !== true → stok habis; kamu bisa tampilkan notifikasi via redirect/searchParams kalau perlu
   }
 
+  // Gambar utama (fallback ke placeholder)
+  const imgSrc =
+    (product.images && product.images[0]) || "/placeholder-product.jpg";
+
   return (
-    <main className="max-w-3xl mx-auto p-6">
-      <Link href="/products" className="text-sm text-blue-600">← Kembali</Link>
-
-      <h1 className="mt-2 text-2xl font-semibold">{product.name}</h1>
-      <div className="mb-2 opacity-70">Rp {price.toLocaleString("id-ID")}</div>
-
-      <div className={`text-sm ${qty > 0 ? "text-green-700" : "text-red-700"}`}>
-        Stock: {qty}
+    <main className="mx-auto max-w-5xl px-6 py-10">
+      {/* Breadcrumb / Back */}
+      <div className="mb-4 text-sm">
+        <Link href="/products" className="text-blue-600 hover:underline">
+          ← Kembali ke katalog
+        </Link>
       </div>
 
-      <ProductTabs
-        description={product.description ?? ""}
-        specs={product.specs ?? ""}
-        reviews={[]}
-      />
+      {/* Header produk */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-semibold tracking-tight">{product.name}</h1>
+        <div className="mt-1 text-zinc-600">
+          Slug: <span className="font-mono text-zinc-700">{product.slug}</span>
+        </div>
+      </div>
 
-      {/* Submit to the server action (no method/action attributes) */}
-      <form className="mt-4" action={checkoutAction}>
-        <input type="hidden" name="productId" value={product.id} />
-        <button
-          type="submit"
-          className="mt-2 rounded bg-black px-4 py-2 text-white disabled:bg-gray-400"
-          disabled={qty <= 0}
-        >
-          Fake Checkout
-        </button>
-      </form>
+      {/* Konten dua kolom */}
+      <div className="grid gap-8 md:grid-cols-2">
+        {/* Kolom kiri: gambar */}
+        <div>
+          <div className="relative h-72 w-full overflow-hidden rounded-xl border">
+            <Image
+              src={imgSrc}
+              alt={product.name}
+              fill
+              className="object-cover"
+              sizes="(min-width: 768px) 50vw, 100vw"
+              priority
+            />
+            {/* Badge stok di atas gambar */}
+            <span
+              className={`absolute right-3 top-3 rounded-full px-2 py-1 text-xs font-medium ${
+                qty > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+              }`}
+            >
+              {qty > 0 ? `Tersedia (${qty})` : "Stok Habis"}
+            </span>
+          </div>
+        </div>
+
+        {/* Kolom kanan: info & checkout */}
+        <div>
+          <div className="text-2xl font-semibold">
+            Rp {price.toLocaleString("id-ID")}
+          </div>
+
+          <div className="mt-2 text-sm text-zinc-600">
+            {qty > 0 ? "Siap dikirim hari ini." : "Silakan pilih produk lain."}
+          </div>
+
+          {/* Tabs deskripsi/specs/reviews */}
+          <ProductTabs
+            description={product.description ?? ""}
+            specs={product.specs ?? ""}
+            reviews={[]}
+          />
+
+          {/* Form checkout (Server Action) */}
+          <form className="mt-5" action={checkoutAction}>
+            <input type="hidden" name="productId" value={product.id} />
+            <CheckoutButton />
+          </form>
+        </div>
+      </div>
     </main>
   );
 }
