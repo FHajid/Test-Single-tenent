@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
   if (data === true) {
-    revalidateTag(CATALOG_TAG, ""); // pass profile as an empty string to satisfy the overload
+    revalidateTag(CATALOG_TAG, "default");
     return NextResponse.json({ ok: true });
   }
 

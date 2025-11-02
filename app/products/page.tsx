@@ -2,6 +2,29 @@ import Link from "next/link";
 import { CATALOG_TAG } from "@/lib/constants";
 import Image from "next/image";
 
+export const revalidate = 0;
+
+async function getProducts() {
+  try {
+    // Use relative URL - works in both environments
+    const res = await fetch('/api/products', {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!res.ok) {
+      throw new Error(`Failed to fetch products: ${res.status}`);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return [];
+  }
+}
+
 
 export default async function ProductsPage() {
   const products: Array<{
@@ -14,6 +37,7 @@ export default async function ProductsPage() {
   }> = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/products`, {
     next: { tags: [CATALOG_TAG] },
   }).then((r) => r.json());
+
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10 " >
@@ -46,7 +70,7 @@ export default async function ProductsPage() {
           const inStock = (p.qty ?? 0) > 0;
           const imgSrc =
             (p.images && p.images.length > 0 && p.images[0]) ||
-            "/poster.jpg"; // ganti sesuai file di /public
+            "/placeholder.jpg"; // ganti sesuai file di /public
 
           return (
             <Link

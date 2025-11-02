@@ -17,6 +17,7 @@ type ProductRow = {
   images?: string[] | null; // optional kalau kamu sudah punya kolom ini
 };
 
+
 export default async function ProductDetail({
   params,
 }: {
@@ -67,7 +68,7 @@ export default async function ProductDetail({
     const { data, error } = await svc.rpc("checkout_atomic", { p_product_id: pid });
 
     // Invalidate caches supaya katalog & halaman ini update
-    revalidateTag(CATALOG_TAG, "");             // tag name and profile string
+    revalidateTag(CATALOG_TAG, "default");  // tag name and profile
     revalidatePath("/products", "page");
     revalidatePath(`/products/${slug}`, "page");
 
@@ -77,7 +78,7 @@ export default async function ProductDetail({
 
   // Gambar utama (fallback ke placeholder)
   const imgSrc =
-    (product.images && product.images[0]) || "/placeholder-product.jpg";
+    (product.images && product.images[0]) || "/placeholder.jpg";
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
