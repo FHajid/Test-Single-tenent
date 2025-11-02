@@ -1,16 +1,30 @@
-import { NextResponse } from 'next/server';
+// app/api/products/[slug]/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAnon } from '@/lib/supabase';
 
-export async function GET() {
+export async function GET(
+  _req: NextRequest,
+  context: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await context.params; // ✅ await the params promise
+
   const sb = supabaseAnon();
-  const { data: products, error: e1 } = await sb.from('products').select('*').order('id');
-  if (e1) return NextResponse.json({ error: e1.message }, { status: 500 });
 
-  const ids = (products ?? []).map(p => p.id);
-  const { data: stocks, error: e2 } = await sb.from('stock').select('*').in('product_id', ids.length?ids:[-1]);
-  if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
+  const { data: product, error: e1 } = await sb
+    .from('products')
+    .select('*')
+    .eq('slug', slug)
+    .single();
 
-  const qtyMap = new Map<number, number>();
-  (stocks ?? []).forEach(s => qtyMap.set(s.product_id, s.qty));
-  return NextResponse.json((products ?? []).map(p => ({ ...p, qty: qtyMap.get(p.id) ?? 0 })));
+  if (e1 || !product) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const { data: st } = await sb
+    .from('stock')
+    .select('qty')
+    .eq('product_id', product.id)
+    .single();
+
+  return NextResponse.json({ ...product, qty: st?.qty ?? 0 });
 }
